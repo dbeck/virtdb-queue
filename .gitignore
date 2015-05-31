@@ -26,3 +26,33 @@
 *.exe
 *.out
 *.app
+
+# gyp
+Makefile
+*.Makefile
+*.target.mk
+*.xcodeproj/
+gyp-mac-tool
+out/
+
+# xcode and mac stuff
+*.xcodeproj
+.*.swp
+._*.cc
+._*.hh
+._*.pc
+DS_Store
+*DS_Store
+.*DS_Store
+suppress.vg
+typescript
+tags
+*A\ Document\ Being\ Saved*
+
+# NFS
+.nfs.*
+.nfs[0-9a-f]*
+tmp/
+
+# cscope
+cscope.out
