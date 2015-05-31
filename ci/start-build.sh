@@ -22,5 +22,11 @@ docker run --rm=true -e "GITHUB_EMAIL=$GITHUB_EMAIL" \
                      -e "GITHUB_PASSWORD=$GITHUB_PASSWORD" \
                      -e "BUILDNO=$BUILDNO" \
                      -v $PWD/build-result:/home/virtdb-demo/build-result -t $IMAGE_NAME ./build-queue.sh $*
+if [ $? -ne 0 ]
+then
+  echo "ERROR during docker build"
+  exit 101
+fi
+
 ls -ltr $PWD/build-result
 
