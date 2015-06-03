@@ -1,7 +1,14 @@
 {
   'variables': {
     'queue_sources' :  [
-                         'src/queue/queue.cc',   'src/queue/queue.hh',
+                         'src/queue/queue.cc',         'src/queue/queue.hh',
+                         'src/queue/is_folder.cc',     'src/queue/is_folder.hh',
+                         'src/queue/owner_only.cc',    'src/queue/owner_only.hh',
+                         'src/queue/queue.cc',         'src/queue/queue.hh',
+                         'src/queue/publisher.cc',     'src/queue/publisher.hh',
+                         'src/queue/subscriber.cc',    'src/queue/subscriber.hh',
+                         'src/queue/sysinfo.cc',       'src/queue/sysinfo.hh',
+                         'src/queue/exception.hh',     'src/queue/constants.hh',
                        ],
   },
   'target_defaults': {
@@ -46,8 +53,7 @@
        'GCC_ENABLE_CPP_EXCEPTIONS':    'YES',
        'OTHER_CFLAGS':               [ '-std=c++11', ],
      },
-     },
-    ],
+     }, ],
     ['OS=="linux"', {
      'defines':            [ 'QUEUE_LINUX_BUILD', ],
      'link_settings': {
