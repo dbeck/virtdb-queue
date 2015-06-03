@@ -28,15 +28,21 @@ git config --global user.name $GITHUB_USER
 git config --global user.email $GITHUB_EMAIL
 
 gyp --depth=. -fmake 
+make queue_test
+if [ $? -ne 0 ]; then echo "Failed to make tests in $COMPONENT"; exit 10; fi
+
+for i in 1 2 3 4 5 6 7 8 9 10
+do
+  out/Debug/queue_test 
+  if [ $? -ne 0 ]; then echo "$COMPONENT tests failed: iteration #$i"; exit 10; fi
+done
+
 make 
-if [ $? -ne 0 ]; then echo "Failed to make $COMPONENT"; exit 10; fi
+if [ $? -ne 0 ]; then echo "Failed to make all in $COMPONENT"; exit 10; fi
 
 echo $BUILDNO
 git tag -f $BUILDNO
 if [ $? -ne 0 ]; then echo "Failed to tag repo"; exit 10; fi
 git push origin $BUILDNO
 if [ $? -ne 0 ]; then echo "Failed to push tag to repo."; exit 10; fi
-
-out/Debug/queue_test
-if [ $? -ne 0 ]; then echo "$COMPONENT tests failed"; exit 10; fi
 
