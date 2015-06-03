@@ -11,7 +11,6 @@ using namespace virtdb::test;
 
 TEST_F(QueueTest, Dummy)
 {
-  queue q;
 }
 
 int main(int argc, char ** argv)
