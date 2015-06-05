@@ -50,7 +50,7 @@ namespace virtdb { namespace queue {
 }}
 
 #ifndef EXCEPTION_QUEUE_
-#define EXCEPTION_QUEUE_(MSG) virtdb::utils::exception(__FILE__,__LINE__,__func__,MSG)
+#define EXCEPTION_QUEUE_(MSG) virtdb::queue::exception(__FILE__,__LINE__,__func__,MSG)
 #endif // EXCEPTION_QUEUE_
 
 #ifndef THROW_

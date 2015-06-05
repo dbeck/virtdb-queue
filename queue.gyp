@@ -6,9 +6,10 @@
                          'src/queue/owner_only.cc',    'src/queue/owner_only.hh',
                          'src/queue/publisher.cc',     'src/queue/publisher.hh',
                          'src/queue/subscriber.cc',    'src/queue/subscriber.hh',
-                         'src/queue/sysinfo.cc',       'src/queue/sysinfo.hh',
+                         'src/queue/sys_params.cc',    'src/queue/sys_params.hh',
                          'src/queue/exception.hh',     'src/queue/constants.hh',
                          'src/queue/shared_mem.cc',    'src/queue/shared_mem.hh',
+                         'src/queue/mem_protect.cc',   'src/queue/mem_protect.hh',
                        ],
   },
   'target_defaults': {
