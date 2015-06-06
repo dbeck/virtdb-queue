@@ -5,8 +5,8 @@ namespace virtdb { namespace queue {
   class publisher
   {
   public:
-    publisher(const std::string & path);
-    virtual ~publisher();
+    publisher(const std::string & path) {}
+    virtual ~publisher() {}
   };
   
 }}
