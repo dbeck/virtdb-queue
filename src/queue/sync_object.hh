@@ -19,10 +19,11 @@ namespace virtdb { namespace queue {
   {
     int semaphores_;
     int semaphore_id_;
+    int lockfile_fd_;
     
   public:
     sync_server(const std::string & path);
-    virtual ~sync_server() {}
+    virtual ~sync_server();
   };
   
   class sync_client : public sync_object

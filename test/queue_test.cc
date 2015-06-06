@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <queue/shared_mem.hh>
 #include <queue/exception.hh>
+#include <queue/sync_object.hh>
 
 // for semaphores
 #include <sys/types.h>
@@ -14,6 +15,7 @@ using namespace virtdb::queue;
 namespace virtdb { namespace test {
   
   class SysVSemaphore : public ::testing::Test { };
+  class SyncObjectTest : public ::testing::Test { };
   class QueueTest : public ::testing::Test { };
   
 }}
@@ -346,6 +348,23 @@ TEST_F(SysVSemaphore, SimpleCount)
 
 TEST_F(QueueTest, Dummy)
 {
+}
+
+TEST_F(SyncObjectTest, UseRootFolder)
+{
+  auto fun = [](){ sync_server svr("/"); };
+  EXPECT_ANY_THROW(fun());
+}
+
+TEST_F(SyncObjectTest, UseNewTmpFolder)
+{
+  srand(time(NULL));
+  std::string path{"/tmp/"}; path += std::to_string(rand()) + std::to_string(time(NULL));
+  auto fun = [&path](){ sync_server svr(path); };
+  EXPECT_NO_THROW(fun());
+  EXPECT_NO_THROW(fun());
+  // FIXME : this will fail later
+  // EXPECT_EQ(rmdir(path.c_str()), 0);
 }
 
 int main(int argc, char ** argv)

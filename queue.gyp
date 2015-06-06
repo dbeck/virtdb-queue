@@ -4,9 +4,12 @@
                          'src/queue/publisher.cc',     'src/queue/publisher.hh',
                          'src/queue/subscriber.cc',    'src/queue/subscriber.hh',
                          'src/queue/sys_params.cc',    'src/queue/sys_params.hh',
-                         'src/queue/exception.hh',     'src/queue/constants.hh',
                          'src/queue/shared_mem.cc',    'src/queue/shared_mem.hh',
                          'src/queue/sync_object.cc',   'src/queue/sync_object.hh',
+                         # header only:
+                         'src/queue/on_return.hh',
+                         'src/queue/exception.hh',
+                         'src/queue/constants.hh',
                        ],
   },
   'target_defaults': {
