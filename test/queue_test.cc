@@ -221,19 +221,7 @@ namespace {
     
     return new_val;
   }
-    
 }
-
-TEST_F(SysVSemaphore, TestShared1)
-{
-  /*
-  shared_counter sc1("/tmp");
-  {
-    shared_counter sc2("/tmp");
-  }
-  */
-}
-
 
 TEST_F(SysVSemaphore, Parallel2)
 {
@@ -245,7 +233,7 @@ TEST_F(SysVSemaphore, Parallel2)
     return;
   }
   
-  for( int k=0; k<10; ++k )
+  for( int k=0; k<5; ++k )
   {
     std::promise<void> when_started1;
     std::future<void> on_start1{when_started1.get_future()};
@@ -253,7 +241,7 @@ TEST_F(SysVSemaphore, Parallel2)
     std::promise<void> when_started2;
     std::future<void> on_start2{when_started2.get_future()};
 
-    uint64_t lim = (k+10)*12345;
+    uint64_t lim = 1+(k*(k+10))*12345;
     reset_counter(semid);
     
     std::thread thr1([&](){
@@ -360,11 +348,36 @@ TEST_F(SyncObjectTest, UseNewTmpFolder)
 {
   srand(time(NULL));
   std::string path{"/tmp/"}; path += std::to_string(rand()) + std::to_string(time(NULL));
-  auto fun = [&path](){ sync_server svr(path); };
+  auto fun = [&path](){
+    sync_server svr(path);
+  };
   EXPECT_NO_THROW(fun());
   EXPECT_NO_THROW(fun());
-  // FIXME : this will fail later
-  // EXPECT_EQ(rmdir(path.c_str()), 0);
+  try
+  {
+    sync_server svr(path);
+    svr.cleanup_all();
+  }
+  catch(...)
+  {
+  }
+}
+
+TEST_F(SyncObjectTest, UseSameTmpFolder)
+{
+  std::string path{"/tmp/UseSameTmpFolder.test"};
+  auto fun = [&path](){
+    sync_server svr(path);
+    svr.cleanup_all();
+  };
+  EXPECT_NO_THROW(fun());
+}
+
+TEST_F(SyncObjectTest, BasicCliServ)
+{
+  std::string path{"/tmp/BasicCliServ.test"};
+  sync_server svr(path);
+  
 }
 
 int main(int argc, char ** argv)

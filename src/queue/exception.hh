@@ -39,9 +39,9 @@ namespace virtdb { namespace queue {
       data_ = os.str();
     }
 
-    virtual ~exception() {}
+    virtual ~exception() throw() {}
 
-    const char* what() const noexcept(true)
+    const char* what() const throw()
     {
       return data_.c_str();
     }
