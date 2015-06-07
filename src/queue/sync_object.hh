@@ -1,7 +1,6 @@
 #pragma once
 
 #include <string>
-#include <chrono>
 #include <atomic>
 #include <thread>
 
@@ -38,7 +37,6 @@ namespace virtdb { namespace queue {
     std::string                lockfile_;
     std::atomic<uint64_t>      last_value_;
     uint64_t                   throttle_ms_;
-    std::atomic<timepoint_t>   next_update_;
     std::atomic<bool>          stop_;
     std::thread                thread_;
 

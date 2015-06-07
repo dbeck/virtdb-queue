@@ -62,7 +62,7 @@ namespace virtdb { namespace queue {
     arg.array = vals;
     
     if ( ::semctl(semaphore_id(),0,GETALL,arg) < 0 )
-      THROW_("couldn't set value for semaphores");
+      THROW_("couldn't get value for semaphores");
     
     return convert(vals);
   }
@@ -74,11 +74,15 @@ namespace virtdb { namespace queue {
     lockfile_fd_{-1},
     last_value_{0},
     throttle_ms_{throttle_ms},
-    next_update_{clock_t::now()+std::chrono::milliseconds{throttle_ms}},
     stop_{false},
     thread_{[this](){entry();}}
   {
     struct stat dir_stat;
+    on_return cleanup_on_exit([this](){
+      stop_ = true;
+      thread_.join();
+    });
+    
     if( ::lstat(path.c_str(), &dir_stat) == 0 )
     {
       // is a directory
@@ -189,6 +193,9 @@ namespace virtdb { namespace queue {
         THROW_("failed to create semaphore");
       }
     }
+    
+    // disarm thread cleanup guard
+    cleanup_on_exit.reset();
   }
   
   bool
@@ -222,40 +229,116 @@ namespace virtdb { namespace queue {
     }
     
     stop_ = true;
-    thread_.join();
+    if( thread_.joinable() )
+      thread_.join();
   }
   
   void
   sync_server::entry()
   {
-    uint64_t prev = 0;
+    uint64_t prev  = last_value_;
+    
     while( !stop_ )
     {
       std::this_thread::sleep_for(std::chrono::milliseconds{throttle_ms_});
       if( prev < last_value_ )
-        send_signal(last_value_);
-      prev = last_value_;
+      {
+        uint64_t last_val = last_value_;
+        send_signal(last_val-prev);
+        prev = get();
+      }
     }
   }
   
   void
   sync_server::signal()
   {
-    if( (last_value_%base()) == (base()-2) )
-      send_signal(last_value_.load()+1);
     ++last_value_;
   }
 
   void
   sync_server::send_signal(uint64_t v)
   {
-    unsigned short values[5];
-    convert(v, values);
-    semun_t arg;
-    arg.array = values;
-
-    if ( ::semctl(semaphore_id_,0,SETALL,arg) < 0 )
-      perror("failed to set semaphore values");
+    while( v > 0 )
+    {
+      {
+        uint64_t mod = v;
+        if( mod > (base()*9/10) )
+          mod = (base()*9/10);
+        
+        {
+          // adjust semaphore #0 first
+          struct sembuf ops[3];
+          ops[0].sem_num  = 0;
+          ops[0].sem_op   = (short)mod;
+          ops[0].sem_flg  = 0;
+          ops[1].sem_num  = 0;
+          ops[1].sem_op   = -1*(short)base();
+          ops[1].sem_flg  = IPC_NOWAIT;
+          ops[2].sem_num  = 1;
+          ops[2].sem_op   = 1;
+          ops[2].sem_flg  = 0;
+          
+          if( semop(semaphore_id(),ops,3) < 0 )
+          {
+            struct sembuf ops[1];
+            ops[0].sem_num  = 0;
+            ops[0].sem_op   = (short)mod;
+            ops[0].sem_flg  = 0;
+            
+            if( semop(semaphore_id(),ops,1) < 0 )
+            {
+              perror("failed to set semaphore");
+            }
+          }
+        }
+        v -= mod;
+        {
+          // handle overflow on semaphore #1
+          struct sembuf ops[2];
+          ops[0].sem_num  = 0;
+          ops[0].sem_op   = -1*(short)base();
+          ops[0].sem_flg  = IPC_NOWAIT;
+          ops[1].sem_num  = 1;
+          ops[1].sem_op   = 1;
+          ops[1].sem_flg  = 0;
+          semop(semaphore_id(),ops,2);
+        }
+        {
+          // handle overflow on semaphore #2
+          struct sembuf ops[2];
+          ops[0].sem_num  = 1;
+          ops[0].sem_op   = -1*(short)base();
+          ops[0].sem_flg  = IPC_NOWAIT;
+          ops[1].sem_num  = 2;
+          ops[1].sem_op   = 1;
+          ops[1].sem_flg  = 0;
+          semop(semaphore_id(),ops,2);
+        }
+        {
+          // handle overflow on semaphore #3
+          struct sembuf ops[2];
+          ops[0].sem_num  = 2;
+          ops[0].sem_op   = -1*(short)base();
+          ops[0].sem_flg  = IPC_NOWAIT;
+          ops[1].sem_num  = 3;
+          ops[1].sem_op   = 1;
+          ops[1].sem_flg  = 0;
+          semop(semaphore_id(),ops,2);
+        }
+        {
+          // handle overflow on semaphore #4
+          struct sembuf ops[2];
+          ops[0].sem_num  = 3;
+          ops[0].sem_op   = -1*(short)base();
+          ops[0].sem_flg  = IPC_NOWAIT;
+          ops[1].sem_num  = 4;
+          ops[1].sem_op   = 1;
+          ops[1].sem_flg  = 0;
+          semop(semaphore_id(),ops,2);
+        }
+      }
+    }
   }
   
   void
@@ -263,6 +346,7 @@ namespace virtdb { namespace queue {
   {
     unsigned short short_values[5];
     convert(v, short_values);
+    last_value_ = v;
     
     semun_t arg;
     arg.array = short_values;
@@ -323,88 +407,21 @@ namespace virtdb { namespace queue {
   uint64_t
   sync_client::wait_next(uint64_t prev)
   {
-    uint64_t act_val = get();
-    if( act_val > prev )
-      return act_val;
-    
-    unsigned short prev_values[5];
-    convert(prev, prev_values);
+    uint64_t act_val = 0;
     
     while( act_val <= prev )
     {
-      bool done = false;
-      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+      unsigned short vals[5];
+      semun_t arg;
+      arg.array = vals;
       
-      {
-        struct sembuf ops[2];
-        ops[0].sem_num  = 4;
-        ops[0].sem_op   = -1*(prev_values[4]+1);
-        ops[0].sem_flg  = IPC_NOWAIT;
-        ops[1].sem_num  = 4;
-        ops[1].sem_op   = prev_values[4]+1;
-        ops[1].sem_flg  = 0;
-        
-        if( semop(semaphore_id(),ops,2) >= 0 )
-          done = true;
-      }
-
-      if( !done )
-      {
-        struct sembuf ops[2];
-        ops[0].sem_num  = 3;
-        ops[0].sem_op   = -1*(prev_values[3]+1);
-        ops[0].sem_flg  = IPC_NOWAIT;
-        ops[1].sem_num  = 3;
-        ops[1].sem_op   = prev_values[3]+1;
-        ops[1].sem_flg  = 0;
-        
-        if( semop(semaphore_id(),ops,2) >= 0 )
-          done = true;
-      }
-
-      if( !done )
-      {
-        struct sembuf ops[2];
-        ops[0].sem_num  = 2;
-        ops[0].sem_op   = -1*(prev_values[2]+1);
-        ops[0].sem_flg  = IPC_NOWAIT;
-        ops[1].sem_num  = 2;
-        ops[1].sem_op   = prev_values[2]+1;
-        ops[1].sem_flg  = 0;
-        
-        if( semop(semaphore_id(),ops,2) >= 0 )
-          done = true;
-      }
-
-      if( !done )
-      {
-        struct sembuf ops[2];
-        ops[0].sem_num  = 1;
-        ops[0].sem_op   = -1*(prev_values[1]+1);
-        ops[0].sem_flg  = IPC_NOWAIT;
-        ops[1].sem_num  = 1;
-        ops[1].sem_op   = prev_values[1]+1;
-        ops[1].sem_flg  = 0;
-        
-        if( semop(semaphore_id(),ops,2) >= 0 )
-          done = true;
-      }
-
-      if( !done /* && prev_values[0] < (base()*2/3) */ )
-      {
-        struct sembuf ops[2];
-        ops[0].sem_num  = 0;
-        ops[0].sem_op   = -1*(prev_values[0]+1);
-        ops[0].sem_flg  = IPC_NOWAIT; // 0
-        ops[1].sem_num  = 0;
-        ops[1].sem_op   = prev_values[0]+1;
-        ops[1].sem_flg  = 0;
-        
-        if( semop(semaphore_id(),ops,2) >= 0 )
-          done = true;
-      }
-
-      act_val = get();
+      if ( ::semctl(semaphore_id(),0,GETALL,arg) < 0 )
+        THROW_("couldn't get value for semaphores");
+      
+      act_val = convert(vals);
+      if( act_val > prev ) return act_val;
+      
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     
     return act_val;
