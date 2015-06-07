@@ -58,10 +58,10 @@ namespace virtdb { namespace queue {
   sync_object::get()
   {
     unsigned short vals[5];
-    semun_t arg;
-    arg.array = vals;
+    //union semun arg;
+    //arg.array = vals;
     
-    if ( ::semctl(semaphore_id(),0,GETALL,arg) < 0 )
+    if ( ::semctl(semaphore_id(),0,GETALL,vals) < 0 )
       THROW_("couldn't get value for semaphores");
     
     return convert(vals);
@@ -112,7 +112,7 @@ namespace virtdb { namespace queue {
     if( ::lstat(lock_path.c_str(), &lock_stat) )
     {
       // lock file doesn't yet exists
-      lockfile_fd_ = open(lock_path.c_str(), O_WRONLY|O_CREAT|O_EXLOCK|O_EXCL);
+      lockfile_fd_ = open(lock_path.c_str(), O_WRONLY|O_CREAT|O_EXCL);
       if( lockfile_fd_ < 0 )
       {
         THROW_(std::string{"failed to create and lock lockfile: "}+lock_path);
@@ -122,16 +122,20 @@ namespace virtdb { namespace queue {
       
       // will close the lockfile on failure
       on_return close_lockfile([this](){
-        ::flock(lockfile_fd_, LOCK_UN);
         ::close(lockfile_fd_);
         lockfile_fd_ = -1;
       });
-      
+
       if( ::fchmod(lockfile_fd_, S_IRUSR|S_IWUSR) )
       {
         THROW_(std::string{"failed to set permissions on lockfile: "}+lock_path);
       }
       
+      if( ::flock(lockfile_fd_, LOCK_EX|LOCK_NB) )
+      {
+        THROW_(std::string{"failed to lock lockfile: "}+lock_path);
+      }
+
       // disarm
       close_lockfile.reset();
     }
@@ -170,18 +174,16 @@ namespace virtdb { namespace queue {
     {
       key_t semkey = ::ftok(lock_path.c_str(), 1);
       
-      semaphore_id_ = ::semget(semkey, 5, SEM_R|SEM_A );
+      semaphore_id_ = ::semget(semkey, 5, 0600 );
       if( semaphore_id_ < 0 )
       {
-        semaphore_id_ = ::semget(semkey, 5, SEM_R|SEM_A|IPC_CREAT );
+        semaphore_id_ = ::semget(semkey, 5, 0600|IPC_CREAT );
         
         // zero semaphore values upon creation
         {
           unsigned short values[5] = { 0,0,0,0,0 };
-          semun_t arg;
-          arg.array = values;
-          
-          if ( ::semctl(semaphore_id_,0,SETALL,arg) < 0 )
+
+          if ( ::semctl(semaphore_id_,0,SETALL,values) < 0 )
           {
             THROW_("couldn't set initial value for semaphores");
           }
@@ -347,11 +349,8 @@ namespace virtdb { namespace queue {
     unsigned short short_values[5];
     convert(v, short_values);
     last_value_ = v;
-    
-    semun_t arg;
-    arg.array = short_values;
-    
-    if ( ::semctl(semaphore_id_,0,SETALL,arg) < 0 )
+
+    if ( ::semctl(semaphore_id_,0,SETALL,short_values) < 0 )
       THROW_("couldn't set value for semaphores");
   }
   
@@ -396,7 +395,7 @@ namespace virtdb { namespace queue {
     
     {
       key_t semkey = ::ftok(lock_path.c_str(), 1);
-      semaphore_id_ = ::semget(semkey, 5, SEM_R|SEM_A );
+      semaphore_id_ = ::semget(semkey, 5, 0600 );
       if( semaphore_id_ < 0 )
       {
         THROW_("failed to open semaphore");
@@ -412,16 +411,32 @@ namespace virtdb { namespace queue {
     while( act_val <= prev )
     {
       unsigned short vals[5];
-      semun_t arg;
-      arg.array = vals;
       
-      if ( ::semctl(semaphore_id(),0,GETALL,arg) < 0 )
+      if ( ::semctl(semaphore_id(),0,GETALL,vals) < 0 )
         THROW_("couldn't get value for semaphores");
       
       act_val = convert(vals);
       if( act_val > prev ) return act_val;
       
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+#ifdef _GNU_SOURCE
+      if( vals[0] < (base()*9/10) )
+      {
+        // timed wait
+        struct sembuf ops[2];
+        ops[0].sem_num  = 0;
+        ops[0].sem_op   = -1*(vals[0]+1);
+        ops[0].sem_flg  = 0;
+        ops[1].sem_num  = 0;
+        ops[1].sem_op   = vals[0]+1;
+        ops[1].sem_flg  = 0;
+
+        // 20 ms
+        struct timespec ts = { 0, 20*1000000 };
+        semtimedop(semaphore_id(),ops,2,&ts);
+      }
+      else
+#endif
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     
     return act_val;
