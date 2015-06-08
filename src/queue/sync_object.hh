@@ -44,6 +44,10 @@ namespace virtdb { namespace queue {
     void send_signal(uint64_t v);
     void entry();
     
+    // last segment written
+    // last segment size
+    // last message written
+    
   public:
     sync_server(const std::string & path,
                 uint64_t throttle_ms=1);
