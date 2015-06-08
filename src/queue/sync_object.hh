@@ -11,8 +11,15 @@ namespace virtdb { namespace queue {
     std::string   path_;
     short         base_;
     uint64_t      bases_[5];
+    
+    // disable copying and default consturction
+    // until properly implemented
+    sync_object() = delete;
+    sync_object(const sync_object &) = delete;
+    sync_object& operator=(const sync_object &) = delete;
 
   protected:
+    // only children should be able to construct
     sync_object(const std::string & path);
     inline short base() const { return base_; }
     inline uint64_t const * const bases() const { return bases_; }

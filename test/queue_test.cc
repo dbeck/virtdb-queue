@@ -1,13 +1,6 @@
 #include <gtest/gtest.h>
-#include <queue/shared_mem.hh>
 #include <queue/exception.hh>
 #include <queue/sync_object.hh>
-
-// for semaphores
-#include <sys/types.h>
-#include <sys/ipc.h>
-#include <sys/sem.h>
-
 #include <future>
 
 using namespace virtdb::queue;
