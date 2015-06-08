@@ -3,6 +3,7 @@
     'queue_sources' :  [
                          'src/queue/simple_publisher.cc',    'src/queue/simple_publisher.hh',
                          'src/queue/simple_subscriber.cc',   'src/queue/simple_subscriber.hh',
+                         'src/queue/simple_queue.cc',        'src/queue/simple_queue.hh',
                          'src/queue/sync_object.cc',         'src/queue/sync_object.hh',
                          # header only:
                          'src/queue/on_return.hh',           'src/queue/exception.hh',
