@@ -1,6 +1,7 @@
 #pragma once
 
 #include <queue/sync_object.hh>
+#include <set>
 
 namespace virtdb { namespace queue {
   
@@ -18,6 +19,9 @@ namespace virtdb { namespace queue {
     const std::string & path() const { return path_; }
     simple_queue(const std::string & path);
     
+    bool list_files(std::set<std::string> & results) const;
+    std::string last_file() const;
+    
   public:
     virtual ~simple_queue();
   };
@@ -25,6 +29,7 @@ namespace virtdb { namespace queue {
   class simple_publisher : public simple_queue
   {
     sync_server sync_;
+    std::string act_file_;
     
   public:
     simple_publisher(const std::string & path);

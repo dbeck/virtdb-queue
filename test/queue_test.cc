@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <queue/exception.hh>
 #include <queue/sync_object.hh>
+#include <queue/simple_queue.hh>
 #include <future>
 
 using namespace virtdb::queue;
@@ -8,10 +9,18 @@ using namespace virtdb::queue;
 namespace virtdb { namespace test {
   
   class SyncObjectTest : public ::testing::Test { };
+  class SimpleQueueTest : public ::testing::Test { };
   
 }}
 
 using namespace virtdb::test;
+
+TEST_F(SimpleQueueTest, CreatePublisherAndSubscriber)
+{
+  const char * name = "/tmp/SimpleQueueTest.CreatePublisherAndSubscriber.test";
+  simple_publisher pub{name};
+  simple_subscriber sub{name};
+}
 
 TEST_F(SyncObjectTest, Parallel2)
 {

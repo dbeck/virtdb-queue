@@ -21,10 +21,15 @@ namespace virtdb { namespace queue {
   protected:
     // only children should be able to construct
     sync_object(const std::string & path);
+    
+    // accessors
     inline short base() const { return base_; }
     inline uint64_t const * const bases() const { return bases_; }
+    
+    // for upcalls in get(), other common semaphore code ...
     virtual int semaphore_id() const = 0;
     
+    // converting between short arrays and uint64_t
     void convert(uint64_t in, unsigned short out[5]);
     uint64_t convert(unsigned short out[5]);
     
