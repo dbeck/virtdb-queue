@@ -1,5 +1,6 @@
 #pragma once
 
+#include <queue/params.hh>
 #include <string>
 #include <atomic>
 #include <thread>
@@ -11,6 +12,7 @@ namespace virtdb { namespace queue {
     std::string   path_;
     short         base_;
     uint64_t      bases_[5];
+    params        parameters_;
     
     // disable copying and default consturction
     // until properly implemented
@@ -20,7 +22,8 @@ namespace virtdb { namespace queue {
 
   protected:
     // only children should be able to construct
-    sync_object(const std::string & path);
+    sync_object(const std::string & path,
+                const params & prms);
     
     // accessors
     inline short base() const { return base_; }
@@ -35,7 +38,10 @@ namespace virtdb { namespace queue {
     
   public:
     virtual ~sync_object() {}
-    const std::string & path() const { return path_; }
+    
+    // public accessors
+    inline const std::string & path() const { return path_; }
+    inline const params & parameters() const { return parameters_; }
     uint64_t get();
   };
   
@@ -48,7 +54,6 @@ namespace virtdb { namespace queue {
     int                        lockfile_fd_;
     std::string                lockfile_;
     std::atomic<uint64_t>      last_value_;
-    uint64_t                   throttle_ms_;
     std::atomic<bool>          stop_;
     std::thread                thread_;
 
@@ -62,7 +67,7 @@ namespace virtdb { namespace queue {
     
   public:
     sync_server(const std::string & path,
-                uint64_t throttle_ms=1);
+                const params & prms = params());
     virtual ~sync_server();
     
     bool cleanup_all();
@@ -78,7 +83,8 @@ namespace virtdb { namespace queue {
     int semaphore_id() const { return semaphore_id_; }
     
   public:
-    sync_client(const std::string & path);
+    sync_client(const std::string & path,
+                const params & prms = params());
     virtual ~sync_client() {}
     
     uint64_t wait_next(uint64_t prev);

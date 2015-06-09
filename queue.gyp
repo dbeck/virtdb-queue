@@ -4,9 +4,10 @@
                          'src/queue/simple_queue.cc',        'src/queue/simple_queue.hh',
                          'src/queue/sync_object.cc',         'src/queue/sync_object.hh',
                          'src/queue/mmapped_file.cc',        'src/queue/mmapped_file.hh',
-                         'src/queue/params.cc',              'src/queue/params.hh',
                          # header only:
-                         'src/queue/on_return.hh',           'src/queue/exception.hh',
+                         'src/queue/on_return.hh',
+                         'src/queue/exception.hh',
+                         'src/queue/params.hh',
                        ],
   },
   'conditions': [

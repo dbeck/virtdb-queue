@@ -16,7 +16,8 @@
 
 namespace virtdb { namespace queue {
 
-  sync_object::sync_object(const std::string & path)
+  sync_object::sync_object(const std::string & path,
+                           const params & prms)
   : path_{path},
     base_{16000},
     bases_{
@@ -25,7 +26,8 @@ namespace virtdb { namespace queue {
       ((uint64_t)base_)*((uint64_t)base_),
       ((uint64_t)base_)*((uint64_t)base_)*((uint64_t)base_),
       ((uint64_t)base_)*((uint64_t)base_)*((uint64_t)base_)*((uint64_t)base_)
-    }
+    },
+    parameters_{prms}
   {
     if( path.empty() ) { THROW_("invalid parameter: path"); }
   }
@@ -68,12 +70,11 @@ namespace virtdb { namespace queue {
   }
   
   sync_server::sync_server(const std::string & path,
-                           uint64_t throttle_ms)
-  : sync_object{path},
+                           const params & prms)
+  : sync_object{path, prms},
     semaphore_id_{-1},
     lockfile_fd_{-1},
     last_value_{0},
-    throttle_ms_{throttle_ms},
     stop_{false},
     thread_{[this](){entry();}}
   {
@@ -112,7 +113,7 @@ namespace virtdb { namespace queue {
     if( ::lstat(lock_path.c_str(), &lock_stat) )
     {
       // lock file doesn't yet exists
-      lockfile_fd_ = open(lock_path.c_str(), O_WRONLY|O_CREAT|O_EXCL);
+      lockfile_fd_ = open(lock_path.c_str(), O_WRONLY|O_CREAT|O_EXCL, S_IRUSR|S_IWUSR);
       if( lockfile_fd_ < 0 )
       {
         THROW_(std::string{"failed to create and lock lockfile: "}+lock_path);
@@ -125,11 +126,6 @@ namespace virtdb { namespace queue {
         ::close(lockfile_fd_);
         lockfile_fd_ = -1;
       });
-
-      if( ::fchmod(lockfile_fd_, S_IRUSR|S_IWUSR) )
-      {
-        THROW_(std::string{"failed to set permissions on lockfile: "}+lock_path);
-      }
       
       if( ::flock(lockfile_fd_, LOCK_EX|LOCK_NB) )
       {
@@ -242,7 +238,7 @@ namespace virtdb { namespace queue {
     
     while( !stop_ )
     {
-      std::this_thread::sleep_for(std::chrono::milliseconds{throttle_ms_});
+      std::this_thread::sleep_for(std::chrono::milliseconds{parameters().sync_throttle_ms_});
       if( prev < last_value_ )
       {
         uint64_t last_val = last_value_;
@@ -354,8 +350,9 @@ namespace virtdb { namespace queue {
       THROW_("couldn't set value for semaphores");
   }
   
-  sync_client::sync_client(const std::string & path)
-  : sync_object{path}
+  sync_client::sync_client(const std::string & path,
+                           const params & prms)
+  : sync_object{path, prms}
   {
     
     struct stat dir_stat;

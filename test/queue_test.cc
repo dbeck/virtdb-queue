@@ -2,7 +2,9 @@
 #include <queue/exception.hh>
 #include <queue/sync_object.hh>
 #include <queue/simple_queue.hh>
+#include <queue/mmapped_file.hh>
 #include <future>
+#include <iostream>
 
 using namespace virtdb::queue;
 
@@ -10,10 +12,51 @@ namespace virtdb { namespace test {
   
   class SyncObjectTest : public ::testing::Test { };
   class SimpleQueueTest : public ::testing::Test { };
+  class MmappedFileTest : public ::testing::Test { };
   
 }}
 
 using namespace virtdb::test;
+
+TEST_F(MmappedFileTest, SimpleWrite)
+{
+  const char * file_name = "/tmp/MmappedFileTest.SimpleWrite";
+  {
+    params p;
+    p.mmap_writable_ = true;
+    mmapped_file f(file_name,p);
+    f.write("Hello", 5);
+    f.seek_to(5);
+    f.write(" World\n\n", 8);
+    char x[5000];
+    ::memset(x,' ',5000);
+    sprintf(x,"%ld",time(NULL));
+    f.write(x,5000);
+    f.seek_to(4999);
+    f.write("second\n",7);
+  }
+  ::unlink(file_name);
+}
+
+TEST_F(MmappedFileTest, WriteLoop)
+{
+  const char * file_name = "/tmp/MmappedFileTest.WriteLoop";
+  {
+    params p;
+    p.mmap_writable_ = true;
+    mmapped_file f(file_name,p);
+    size_t i = 0;
+    while( f.can_fit(6) )
+    {
+      f.write("\r",   1);
+      f.write("hell", 4);
+      f.write("oo\n", 3);
+      ++i;
+    }
+    std::cout << "did " << i << " loops\n";
+  }
+  // ::unlink(file_name);
+}
 
 TEST_F(SimpleQueueTest, CreatePublisherAndSubscriber)
 {
