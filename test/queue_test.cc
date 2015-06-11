@@ -18,13 +18,38 @@ namespace virtdb { namespace test {
 
 using namespace virtdb::test;
 
+TEST_F(MmappedFileTest, RevampedWriteLoop)
+{
+  const char * file_name = "/tmp/MmappedFileTest.RevampedWrite";
+  
+  char pattern[24] = {
+    'A', '0', '1', '2',   '3', '4', '5', '6',
+    'A', '0', '1', '2',   '3', '4', '5', '6',
+    'A', '0', '1', '2',   '3', '4', '5', '6'
+  };
+  
+  {
+    params p;
+    p.mmap_writable_ = true;
+    mmapped_writer wr(file_name, p);
+    
+    for( int i=0; i<17*1024*1024; ++i )
+    {
+      wr.write(pattern,    1);
+      wr.write(pattern+1,  18);
+      wr.write(pattern+19, 5);
+    }
+  }
+  ::unlink(file_name);
+}
+
 TEST_F(MmappedFileTest, SimpleWrite)
 {
   const char * file_name = "/tmp/MmappedFileTest.SimpleWrite";
   {
     params p;
     p.mmap_writable_ = true;
-    mmapped_file f(file_name,p);
+    mmapped_file_old f(file_name,p);
     f.write("Hello", 5);
     f.seek_to(5);
     f.write(" World\n\n", 8);
@@ -44,7 +69,7 @@ TEST_F(MmappedFileTest, WriteLoop)
   {
     params p;
     p.mmap_writable_ = true;
-    mmapped_file f(file_name,p);
+    mmapped_file_old f(file_name,p);
     size_t i = 0;
     while( f.can_fit(6) )
     {
