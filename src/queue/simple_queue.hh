@@ -1,6 +1,7 @@
 #pragma once
 
 #include <queue/sync_object.hh>
+#include <queue/mmapped_file.hh>
 #include <set>
 
 namespace virtdb { namespace queue {
@@ -28,8 +29,8 @@ namespace virtdb { namespace queue {
   
   class simple_publisher : public simple_queue
   {
-    sync_server sync_;
-    std::string act_file_;
+    sync_server           sync_;
+    mmapped_writer::sptr  writer_sptr_;
     
   public:
     simple_publisher(const std::string & path);
@@ -38,7 +39,8 @@ namespace virtdb { namespace queue {
   
   class simple_subscriber : public simple_queue
   {
-    sync_client sync_;
+    sync_client           sync_;
+    mmapped_reader::sptr  reader_sptr_;
     
   public:
     simple_subscriber(const std::string & path);

@@ -5,6 +5,7 @@
 #include <queue/mmapped_file.hh>
 #include <future>
 #include <iostream>
+#include <string.h>
 
 using namespace virtdb::queue;
 
@@ -20,7 +21,7 @@ using namespace virtdb::test;
 
 TEST_F(MmappedFileTest, RevampedWriteLoop)
 {
-  const char * file_name = "/tmp/MmappedFileTest.RevampedWrite";
+  const char * file_name = "/tmp/MmappedFileTest.RevampedWriteLoop";
   
   char pattern[24] = {
     'A', '0', '1', '2',   '3', '4', '5', '6',
@@ -28,60 +29,86 @@ TEST_F(MmappedFileTest, RevampedWriteLoop)
     'A', '0', '1', '2',   '3', '4', '5', '6'
   };
   
+  uint64_t last_pos = 0;
   {
     params p;
     p.mmap_writable_ = true;
     mmapped_writer wr(file_name, p);
     
-    for( int i=0; i<17*1024*1024; ++i )
+    for( int i=0; i<4*1024*1024; ++i )
     {
       wr.write(pattern,    1);
       wr.write(pattern+1,  18);
       wr.write(pattern+19, 5);
     }
+    last_pos = wr.last_position();
+    EXPECT_EQ(last_pos, 4*1024*1024*24);
   }
-  ::unlink(file_name);
-}
-
-TEST_F(MmappedFileTest, SimpleWrite)
-{
-  const char * file_name = "/tmp/MmappedFileTest.SimpleWrite";
+  
   {
     params p;
-    p.mmap_writable_ = true;
-    mmapped_file_old f(file_name,p);
-    f.write("Hello", 5);
-    f.seek_to(5);
-    f.write(" World\n\n", 8);
-    char x[5000];
-    ::memset(x,' ',5000);
-    sprintf(x,"%ld",time(NULL));
-    f.write(x,5000);
-    f.seek_to(4999);
-    f.write("second\n",7);
-  }
-  ::unlink(file_name);
-}
-
-TEST_F(MmappedFileTest, WriteLoop)
-{
-  const char * file_name = "/tmp/MmappedFileTest.WriteLoop";
-  {
-    params p;
-    p.mmap_writable_ = true;
-    mmapped_file_old f(file_name,p);
-    size_t i = 0;
-    while( f.can_fit(6) )
+    mmapped_reader rd(file_name, p);
+    
+    for( int i=0; i<4*1024*1024; ++i )
     {
-      f.write("\r",   1);
-      f.write("hell", 4);
-      f.write("oo\n", 3);
-      ++i;
+      uint64_t remaining = 0;
+      const uint8_t * ptr = rd.get(remaining);
+      if( remaining < 24 )
+      {
+        rd.seek(rd.last_position());
+        ptr = rd.get(remaining);
+      }
+      
+      EXPECT_EQ(::memcmp(pattern, ptr, 1), 0);
+      ptr = rd.move_by(1, remaining);
+      EXPECT_EQ(::memcmp(pattern+1, ptr, 18), 0);
+      ptr = rd.move_by(18, remaining);
+      EXPECT_EQ(::memcmp(pattern+19, ptr, 5), 0);
+      ptr = rd.move_by(5, remaining);
     }
-    std::cout << "did " << i << " loops\n";
+    
+    EXPECT_EQ(rd.last_position(), last_pos);
+    std::cout << "last_pos: " << last_pos  << " msgs: " << 4*1024*1024*3 << "\n";
   }
-  // ::unlink(file_name);
+  ::unlink(file_name);
 }
+
+TEST_F(MmappedFileTest, RevampedIntegerLoop)
+{
+  const char * file_name = "/tmp/MmappedFileTest.RevampedIntegerLoop";
+  
+  {
+    params p;
+    p.mmap_writable_ = true;
+    mmapped_writer wr(file_name, p);
+    
+    for( uint32_t i=0; i<23*1024*1024; ++i )
+      wr.write(&i, sizeof(i));
+  }
+  
+  {
+    params p;
+    mmapped_reader rd(file_name, p);
+    uint64_t remaining = 0;
+    const uint32_t * ptr = rd.get<uint32_t>(remaining);
+    
+    for( uint32_t i=0; i<23*1024*1024; ++i )
+    {
+      EXPECT_EQ(*ptr, i);
+      ptr = rd.move_by<uint32_t>(sizeof(i), remaining);
+      
+      if( remaining < sizeof(i) )
+      {
+        rd.seek(rd.last_position());
+        ptr = rd.get<uint32_t>(remaining);
+      }
+    }
+    
+    std::cout << "last_pos: " << rd.last_position() << " msgs: " << 23*1024*1024 << "\n";
+  }
+  ::unlink(file_name);
+}
+
 
 TEST_F(SimpleQueueTest, CreatePublisherAndSubscriber)
 {

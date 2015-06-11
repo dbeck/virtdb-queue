@@ -11,7 +11,9 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
 
+// C++ lib
 #include <iostream>
 
 namespace virtdb { namespace queue {
@@ -23,7 +25,6 @@ namespace virtdb { namespace queue {
   : name_{filename},
     parameters_{prms},
     fd_{-1},
-    absolute_position_{0},
     relative_position_{0},
     min_known_size_{0},
     aligned_ptr_{nullptr},
@@ -109,7 +110,6 @@ namespace virtdb { namespace queue {
     
     if( fd_ < 0 )
     {
-      perror("failed to open");
       THROW_(std::string{"failed to open file for writing: "}+name_);
     }
   }
@@ -210,11 +210,9 @@ namespace virtdb { namespace queue {
       THROW_(std::string{"failed to mmap file: "}+name_+" pos: "+std::to_string(offset));
     }
     
-    aligned_ptr_     = (uint8_t *)buff;
-    aligned_offset_  = real_offset;
-    aligned_size_    = real_len;
-    
-    absolute_position_   = offset;
+    aligned_ptr_         = (uint8_t *)buff;
+    aligned_offset_      = real_offset;
+    aligned_size_        = real_len;
     relative_position_   = offset-real_offset;
   }
   
@@ -243,7 +241,7 @@ namespace virtdb { namespace queue {
       real_len    += (2*page_size);
       real_offset  = (offset/page_size)*page_size;
     }
-
+    
     // reset previous mapping if any
     unmap_all();
     
@@ -261,12 +259,10 @@ namespace virtdb { namespace queue {
       THROW_(std::string{"failed to mmap file: "}+name_+" pos: "+std::to_string(offset));
     }
     
-    aligned_ptr_     = (uint8_t *)buff;
-    aligned_offset_  = real_offset;
-    aligned_size_    = real_len;
-    
-    absolute_position_   = offset;
-    relative_position_   = offset-real_offset;
+    aligned_ptr_        = (uint8_t *)buff;
+    aligned_offset_     = real_offset;
+    aligned_size_       = real_len;
+    relative_position_  = offset-real_offset;
   }
   
   void
@@ -296,12 +292,10 @@ namespace virtdb { namespace queue {
     }
     
     // reset all related variables
-    aligned_ptr_      = nullptr;
-    aligned_size_     = 0;
-    aligned_offset_   = 0;
-
-    absolute_position_   = 0;
-    relative_position_   = 0;
+    aligned_ptr_        = nullptr;
+    aligned_size_       = 0;
+    aligned_offset_     = 0;
+    relative_position_  = 0;
   }
   
   uint8_t *
@@ -483,14 +477,14 @@ namespace virtdb { namespace queue {
                                  const params & prms)
   : mmapped_file{filename, prms}
   {
-    set_writeable(true);
+    set_writeable(false);
     if( !exists() )
     {
       THROW_(std::string{"no such file : "}+filename);
     }
     uint64_t map_size = prms.mmap_buffer_size_;
     uint64_t sz = size();
-    if( map_size < sz )
+    if( map_size > sz )
     {
       map_size = sz;
     }
@@ -525,9 +519,7 @@ namespace virtdb { namespace queue {
     
     if( remaining < required_size )
     {
-      mmap_file_for_reading(last_pos,
-                            parameters().mmap_buffer_size_);
-      
+      seek( last_pos );      
       buffer_ptr = get_ptr(remaining);
       
       if( !remaining )
@@ -555,209 +547,29 @@ namespace virtdb { namespace queue {
     {
       THROW_(std::string{"insufficient space available in mmapped file: "}+name());
     }
+    
+    auto const & prms   = parameters();
+    uint64_t page_size  = prms.sys_page_size_;
+    uint64_t new_pos    = pos;
+    
+    if( new_pos % page_size )
+    {
+      new_pos = (pos/page_size)*page_size;
+    }
 
-    uint64_t remaining = sz - pos;
+    uint64_t remaining = sz - new_pos;
+    
     if( remaining > parameters().mmap_buffer_size_ )
+    {
       remaining = parameters().mmap_buffer_size_;
+    }
+    
+    if( remaining % page_size )
+    {
+      remaining = (remaining/page_size)*page_size;
+    }
     
     mmap_file_for_reading(pos, remaining);
   }
   
-  // OLD IMPLEMANTATION
-  
-  mmapped_file_old::mmapped_file_old(const std::string & filename,
-                                     const params & prms)
-  : name_{filename},
-    fd_{-1},
-    buffer_{nullptr},
-    offset_{0},
-    next_position_{0},
-    parameters_{prms},
-    real_buffer_{nullptr},
-    real_size_{0}
-  {
-    bool exists = true;
-    struct stat file_stat;
-    
-    if( ::lstat(filename.c_str(), &file_stat) )
-    {
-      exists = false;
-    }
-
-    if( prms.mmap_writable_ && !exists )
-    {
-      fd_ = open(filename.c_str(), O_RDWR|O_CREAT|O_EXCL, S_IRUSR|S_IWUSR);
-      if( fd_ < 0 ) { THROW_(std::string{"failed to create file: "}+filename); }
-    }
-    else if( prms.mmap_writable_ && exists )
-    {
-      fd_ = open(filename.c_str(), O_RDWR);
-      if( fd_ < 0 ) { THROW_(std::string{"failed to open file for writing: "}+filename); }
-    }
-    else
-    {
-      fd_ = open(filename.c_str(), O_RDONLY);
-      if( fd_ < 0 ) { THROW_(std::string{"failed to open file for reading: "}+filename); }
-    }
-    
-    seek_to(0);
-  }
-  
-  mmapped_file_old::~mmapped_file_old()
-  {
-    if( buffer_ )
-    {
-      if( next_position_ > offset_ && parameters().mmap_writable_ )
-      {
-        uint64_t sync_len = ((next_position_-offset_)+parameters().sys_page_size_)/parameters().sys_page_size_;
-        sync_len *= parameters().sys_page_size_;
-        if( sync_len > real_size_ ) sync_len = real_size_;
-        ::msync(real_buffer_, sync_len, MS_SYNC);
-        std::cout << "synced " << sync_len << "  bytes\n";
-      }
-      ::munmap(real_buffer_, real_size_);
-      buffer_       = nullptr;
-      real_buffer_  = nullptr;
-    }
-    if( fd_ >= 0 )
-    {
-      ::close(fd_);
-      fd_ = -1;
-    }
-  }
-  
-  void
-  mmapped_file_old::seek_to(uint64_t pos)
-  {
-    if( fd_ < 0 )
-    {
-      THROW_(std::string{"cannot map file: "}+name()+" bacause fd_ is negative");
-    }
-    
-    auto const & prms = parameters();
-    
-    size_t  len         = prms.mmap_buffer_size_;
-    size_t  real_len    = len;
-    off_t   off         = pos;
-    off_t   real_off    = off;
-    int     prot        = PROT_READ;
-    
-    if( pos%prms.sys_page_size_ )
-    {
-      real_len += (2*prms.sys_page_size_);
-      real_off = (pos/prms.sys_page_size_)*prms.sys_page_size_;
-    }
-    
-    if( buffer_ )
-    {
-      if( prms.mmap_writable_ )
-      {
-        uint64_t sync_len = ((next_position_-offset_)+parameters().sys_page_size_)/parameters().sys_page_size_;
-        sync_len *= parameters().sys_page_size_;
-        if( sync_len > real_size_ ) sync_len = real_size_;
-        if( ::msync(real_buffer_, sync_len, MS_SYNC) )
-        {
-          perror("sync failed");
-          // THROW_(std::string{"failed to sync file: "}+name());
-        }
-        std::cout << "synced " << sync_len << "  bytes\n";
-      }
-      if( ::munmap(real_buffer_, real_size_) )
-      {
-        THROW_(std::string{"failed to unmap file: "}+name());
-      }
-      buffer_          = nullptr;
-      next_position_   = 0;
-      offset_          = 0;
-      real_buffer_     = nullptr;
-      real_size_       = 0;
-    }
-    
-    if( prms.mmap_writable_ )
-    {
-      struct stat file_stat;
-      if( ::lstat(name().c_str(), &file_stat) )
-      {
-        THROW_(std::string{"cannot stat file:"}+name());
-      }
-      
-      prot |= PROT_WRITE;
-      
-      if( file_stat.st_size < real_len+real_off )
-      {
-        if( ftruncate(fd_, real_len+real_off) )
-        {
-          THROW_(std::string{"couldn't extend file: "}+name()+" to: "+std::to_string(pos+len));
-        }
-      }
-    }
-    
-    void * buff = ::mmap(buffer_,
-                         real_len,
-                         prot,
-                         MAP_SHARED,
-                         fd_,
-                         real_off);
-    
-    if( buff == MAP_FAILED || buff == nullptr )
-    {
-      THROW_(std::string{"failed to mmap file: "}+name()+" pos: "+std::to_string(pos));
-    }
-    
-    if( len == real_len )
-      buffer_ = buff;
-    else
-      buffer_ = ((char *)buff)+(pos%prms.sys_page_size_);
-    
-    offset_         = pos;
-    next_position_  = pos;
-    real_buffer_    = buff;
-    real_size_      = real_len;
-  }
-
-  void
-  mmapped_file_old::write(const void * data,
-                      uint64_t sz)
-  {
-    if( !buffer_ )
-    {
-      THROW_(std::string{"cannot write data. file: "}+name()+" not yet mapped");
-    }
-    auto const & prms = parameters();
-    if( !prms.mmap_writable_ )
-    {
-      THROW_(std::string{"cannot write data. file: "}+name()+" opened for read");
-    }
-    if( sz > prms.mmap_buffer_size_ )
-    {
-      THROW_(std::string{"cannot write bigger than: "}+std::to_string(prms.mmap_buffer_size_));
-    }
-    
-    uint64_t written_already = next_position_ - offset_;
-    uint64_t free_space = prms.mmap_buffer_size_ - written_already;
-    
-    if( free_space < sz )
-    {
-      seek_to(next_position_);
-    }
-    
-    if( sz && data )
-    {
-      ::memcpy((char *)buffer_+(next_position_-offset_), data, sz);
-      next_position_ += sz;
-    }
-  }
-  
-  void
-  mmapped_file_old::read(void * data,
-                     uint64_t sz)
-  {
-  }
-  
-  const void *
-  mmapped_file_old::get(uint64_t sz)
-  {
-    return nullptr;
-  }
-
 }}
