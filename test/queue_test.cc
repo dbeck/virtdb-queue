@@ -37,11 +37,13 @@ TEST_F(MmappedFileTest, RevampedWriteLoop)
     
     for( int i=0; i<4*1024*1024; ++i )
     {
-      wr.write(pattern,    1);
-      wr.write(pattern+1,  18);
-      wr.write(pattern+19, 5);
+      last_pos = wr.write(pattern,    1);
+      EXPECT_EQ(last_pos, wr.last_position());
+      last_pos = wr.write(pattern+1,  18);
+      EXPECT_EQ(last_pos, wr.last_position());
+      last_pos = wr.write(pattern+19, 5);
+      EXPECT_EQ(last_pos, wr.last_position());
     }
-    last_pos = wr.last_position();
     EXPECT_EQ(last_pos, 4*1024*1024*24);
   }
   
@@ -109,12 +111,24 @@ TEST_F(MmappedFileTest, RevampedIntegerLoop)
   ::unlink(file_name);
 }
 
-
 TEST_F(SimpleQueueTest, CreatePublisherAndSubscriber)
 {
   const char * name = "/tmp/SimpleQueueTest.CreatePublisherAndSubscriber.test";
-  simple_publisher pub{name};
-  simple_subscriber sub{name};
+  std::string act_file;
+  {
+    params p;
+    p.mmap_max_file_size_ = 4*1024*1024;
+
+    simple_publisher pub{name, p};
+    simple_subscriber sub{name, p};
+  
+    for( uint32_t i=0; i<23*1024*1024; ++i )
+      pub.push(&i, sizeof(i));
+  
+    act_file = pub.act_file();
+  }
+
+  EXPECT_FALSE(act_file.empty());  
 }
 
 TEST_F(SyncObjectTest, Parallel2)
@@ -136,7 +150,7 @@ TEST_F(SyncObjectTest, Parallel2)
     std::thread thr1([&](){
       when_started1.set_value();
       for( uint64_t i=0;i<lim;++i )
-        svr.signal();
+        svr.signal(i+1);
     });
     
     on_start1.wait();
@@ -216,10 +230,11 @@ TEST_F(SyncObjectTest, RoundTrip)
     uint64_t v=0;
     svr_peer.set(0);
     when_started.set_value();
+    uint64_t i=0;
     while( v < 1000 )
     {
       v = cli_here.wait_next(v);
-      svr_peer.signal();
+      svr_peer.signal(++i);
     }
   });
   
@@ -229,7 +244,7 @@ TEST_F(SyncObjectTest, RoundTrip)
   uint64_t v = 0;
   for( uint64_t i=0;i<1000; ++i )
   {
-    svr_here.signal();
+    svr_here.signal(i+1);
     v = cli_peer.wait_next(v);
   }
   

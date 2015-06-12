@@ -26,21 +26,22 @@ namespace virtdb { namespace queue {
                 const params & prms);
     
     // accessors
-    inline short base() const { return base_; }
-    inline uint64_t const * const bases() const { return bases_; }
+    inline short                  base()   const { return base_; }
+    inline uint64_t const * const bases()  const { return bases_; }
     
     // for upcalls in get(), other common semaphore code ...
     virtual int semaphore_id() const = 0;
     
     // converting between short arrays and uint64_t
-    void convert(uint64_t in, unsigned short out[5]);
+    void convert(uint64_t in,
+                 unsigned short out[5]);
     uint64_t convert(unsigned short out[5]);
     
   public:
     virtual ~sync_object() {}
     
     // public accessors
-    inline const std::string & path() const { return path_; }
+    inline const std::string & path()  const { return path_; }
     inline const params & parameters() const { return parameters_; }
     uint64_t get();
   };
@@ -53,6 +54,7 @@ namespace virtdb { namespace queue {
     int                        semaphore_id_;
     int                        lockfile_fd_;
     std::string                lockfile_;
+    std::atomic<uint64_t>      sent_value_;
     std::atomic<uint64_t>      last_value_;
     std::atomic<bool>          stop_;
     std::thread                thread_;
@@ -71,7 +73,7 @@ namespace virtdb { namespace queue {
     virtual ~sync_server();
     
     bool cleanup_all();
-    void signal();
+    void signal(uint64_t v);
     void set(uint64_t v);
   };
   

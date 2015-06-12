@@ -2,13 +2,15 @@
 
 #include <queue/sync_object.hh>
 #include <queue/mmapped_file.hh>
+#include <queue/params.hh>
 #include <set>
 
 namespace virtdb { namespace queue {
   
   class simple_queue
   {
-    std::string path_;
+    std::string   path_;
+    params        parameters_;
     
     // disable copying and default consturction
     // until properly implemented
@@ -17,8 +19,10 @@ namespace virtdb { namespace queue {
     simple_queue& operator=(const simple_queue &) = delete;
     
   protected:
-    const std::string & path() const { return path_; }
-    simple_queue(const std::string & path);
+    const std::string & path()   const { return path_; }
+    const params & parameters()  const { return parameters_; }
+    simple_queue(const std::string & path,
+                 const params & p);
     
     bool list_files(std::set<std::string> & results) const;
     std::string last_file() const;
@@ -31,10 +35,15 @@ namespace virtdb { namespace queue {
   {
     sync_server           sync_;
     mmapped_writer::sptr  writer_sptr_;
+    uint64_t              file_offset_;
     
   public:
-    simple_publisher(const std::string & path);
+    simple_publisher(const std::string & path,
+                     const params & p = params());
     virtual ~simple_publisher();
+    
+    void push(const void * data, uint64_t len);
+    std::string act_file() const;
   };
   
   class simple_subscriber : public simple_queue
@@ -43,7 +52,8 @@ namespace virtdb { namespace queue {
     mmapped_reader::sptr  reader_sptr_;
     
   public:
-    simple_subscriber(const std::string & path);
+    simple_subscriber(const std::string & path,
+                      const params & p = params());
     virtual ~simple_subscriber();
   };
   

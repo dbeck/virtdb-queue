@@ -74,6 +74,7 @@ namespace virtdb { namespace queue {
   : sync_object{path, prms},
     semaphore_id_{-1},
     lockfile_fd_{-1},
+    sent_value_{0},
     last_value_{0},
     stop_{false},
     thread_{[this](){entry();}}
@@ -234,24 +235,22 @@ namespace virtdb { namespace queue {
   void
   sync_server::entry()
   {
-    uint64_t prev  = last_value_;
-    
     while( !stop_ )
     {
       std::this_thread::sleep_for(std::chrono::milliseconds{parameters().sync_throttle_ms_});
-      if( prev < last_value_ )
+      if( sent_value_ < last_value_ )
       {
         uint64_t last_val = last_value_;
-        send_signal(last_val-prev);
-        prev = get();
+        send_signal(last_val-sent_value_);
+        sent_value_ = get();
       }
     }
   }
   
   void
-  sync_server::signal()
+  sync_server::signal(uint64_t v)
   {
-    ++last_value_;
+    last_value_ = v;
   }
 
   void
@@ -291,17 +290,6 @@ namespace virtdb { namespace queue {
           }
         }
         v -= mod;
-        {
-          // handle overflow on semaphore #1
-          struct sembuf ops[2];
-          ops[0].sem_num  = 0;
-          ops[0].sem_op   = -1*(short)base();
-          ops[0].sem_flg  = IPC_NOWAIT;
-          ops[1].sem_num  = 1;
-          ops[1].sem_op   = 1;
-          ops[1].sem_flg  = 0;
-          semop(semaphore_id(),ops,2);
-        }
         {
           // handle overflow on semaphore #2
           struct sembuf ops[2];
@@ -344,10 +332,14 @@ namespace virtdb { namespace queue {
   {
     unsigned short short_values[5];
     convert(v, short_values);
+    // increasing sent value in advance to prevent updates on the other thread
+    sent_value_ = v;
     last_value_ = v;
 
     if ( ::semctl(semaphore_id_,0,SETALL,short_values) < 0 )
       THROW_("couldn't set value for semaphores");
+    
+    sent_value_ = get();
   }
   
   sync_client::sync_client(const std::string & path,

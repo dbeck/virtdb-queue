@@ -323,7 +323,7 @@ namespace virtdb { namespace queue {
     }
     if( (relative_position_+by) > aligned_size_ )
     {
-      THROW_(std::string{"not enough space in buffer fo mmapped file: "}+name());
+      THROW_(std::string{"not enough space in buffer for mmapped file: "}+name());
     }
     relative_position_ += by;
     remaining = (aligned_size_ - relative_position_);
@@ -536,7 +536,7 @@ namespace virtdb { namespace queue {
   mmapped_reader::move_by(uint64_t by,
                           uint64_t & remaining)
   {
-    return  move_ptr(by, remaining);
+    return move_ptr(by, remaining);
   }
   
   void

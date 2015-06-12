@@ -31,7 +31,7 @@ int main(int argc, char ** argv)
     s.set(0);
     
     for( long long i=0; i<count; ++i )
-      s.signal();
+      s.signal(i);
   }
   catch( const std::exception & e )
   {
