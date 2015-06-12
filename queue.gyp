@@ -91,5 +91,17 @@
       'dependencies':  [ 'queue', ],
       'sources':       [ 'test/sync_client_test.cc', ],
     },
+    {
+      'target_name':     'simple_q_server_test',
+      'type':            'executable',
+      'dependencies':  [ 'queue', ],
+      'sources':       [ 'test/simple_q_server_test.cc', ],
+    },
+    {
+      'target_name':     'simple_q_client_test',
+      'type':            'executable',
+      'dependencies':  [ 'queue', ],
+      'sources':       [ 'test/simple_q_client_test.cc', ],
+    },
   ],
 }
