@@ -6,6 +6,7 @@
 #include <future>
 #include <iostream>
 #include <string.h>
+#include <map>
 
 using namespace virtdb::queue;
 
@@ -128,7 +129,67 @@ TEST_F(SimpleQueueTest, CreatePublisherAndSubscriber)
     act_file = pub.act_file();
   }
 
-  EXPECT_FALSE(act_file.empty());  
+  EXPECT_FALSE(act_file.empty());
+  simple_publisher::cleanup_all(name);
+}
+
+TEST_F(SimpleQueueTest, SlowPublish)
+{
+  const char * name = "/tmp/SimpleQueueTest.SlowPublish.test";
+  {
+    using namespace std::chrono;
+    steady_clock::time_point lim = steady_clock::now() + seconds{3};
+    uint64_t sent = 0;
+    std::promise<void> on_done;
+    std::future<void> done{on_done.get_future()};
+    std::promise<void> on_started;
+    std::future<void> started{on_started.get_future()};
+    
+    std::thread t([&](){
+      simple_publisher pub{name};
+      on_started.set_value();
+      
+      while(steady_clock::now() < lim) {
+        pub.push(&sent, sizeof(sent));
+        std::this_thread::sleep_for(milliseconds(100));
+        ++sent;
+      }
+      on_done.set_value();
+    });
+
+    started.wait();
+    simple_subscriber sub{name};
+    
+    uint64_t from = 0;
+    std::map<uint64_t, uint64_t> value_to_id;
+    
+    auto on_data = [&](uint64_t id,
+                       const uint8_t * data,
+                       uint64_t len) {
+      EXPECT_EQ(len, sizeof(sent));
+      if( len == sizeof(sent) )
+      {
+        uint64_t recvd = 0;
+        ::memcpy(&recvd, data, len);
+        value_to_id[recvd] = id;
+        std::cout << "received: " << recvd << " @" << id << "\n";
+      }
+      return true;
+    };
+    
+    while( true )
+    {
+      from = sub.pull(from, on_data, 5000);
+      if( done.wait_for(milliseconds{10}) == std::future_status::ready )
+        break;
+    }
+
+    done.wait();
+    t.join();
+    
+    EXPECT_EQ(value_to_id.size(), sent);
+  }
+  simple_publisher::cleanup_all(name);
 }
 
 TEST_F(SyncObjectTest, Parallel2)

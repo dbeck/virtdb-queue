@@ -101,14 +101,15 @@ namespace virtdb { namespace queue {
   }
   
   bool
-  simple_queue::list_files(std::set<std::string> & results) const
+  simple_queue::list_files(std::set<std::string> & results,
+                           const std::string & path)
   {
     bool            ret{false};
     DIR*            dp{nullptr};
     struct dirent*  dirp{nullptr};
     
-    if((dp  = opendir(path_.c_str())) == NULL) {
-      THROW_(std::string{"cannot list folder:"}+path_);
+    if((dp  = opendir(path.c_str())) == NULL) {
+      THROW_(std::string{"cannot list folder:"}+path);
     }
     
     while ((dirp = readdir(dp)) != NULL) {
@@ -119,9 +120,14 @@ namespace virtdb { namespace queue {
         ret = true;
       }
     }
-    
     closedir(dp);
     return ret;
+  }
+  
+  bool
+  simple_queue::list_files(std::set<std::string> & results) const
+  {
+    return list_files(results, path());
   }
   
   std::string
@@ -135,6 +141,23 @@ namespace virtdb { namespace queue {
         ret = *(files.rbegin());
     }
     return ret;
+  }
+  
+  void
+  simple_publisher::cleanup_all(const std::string & path)
+  {
+    // cleanup sync object
+    sync_server s{path};
+    s.cleanup_all();
+    
+    // gather list of file
+    std::set<std::string> files;
+    list_files(files, path);
+    for( auto const & f: files)
+    {
+      std::string filename = path + "/" + f;
+      ::unlink(filename.c_str());
+    }
   }
   
   simple_publisher::simple_publisher(const std::string & path,
@@ -168,7 +191,7 @@ namespace virtdb { namespace queue {
       uint64_t remaining   = 0;
       const uint8_t * ptr  = reader.get(remaining);
       
-      while( true && ptr != nullptr )
+      while( ptr != nullptr )
       {
         // check magic
         if( ((*ptr) & 0xf0) != 0xf0 )
@@ -287,19 +310,88 @@ namespace virtdb { namespace queue {
   simple_subscriber::simple_subscriber(const std::string & path,
                                        const params & p)
   : simple_queue{path, p},
-    sync_{path, p}
+    sync_{path, p},
+    next_{0},
+    act_file_{0}
   {
     update_ids();
   }
   
-  void
-  simple_subscriber::open_file(uint64_t id)
+  uint64_t
+  simple_subscriber::pull_from(uint64_t from,
+                               pull_fun f)
   {
-  }
-  
-  void
-  simple_subscriber::open_from_id(uint64_t id)
-  {
+    // decide which file to read from
+    auto decide_file = [this](uint64_t from_val) {
+      uint64_t ret = 0;
+      for( auto it=file_ids_.begin(); it!=file_ids_.end(); ++it )
+      {
+        if( from_val <= *it )
+          ret = *it;
+        else
+          break;
+      }
+      return ret;
+    };
+
+    uint64_t read_from = decide_file(from);
+    
+    if( act_file_ != read_from || !reader_sptr_ )
+    {
+      // re-check file list
+      update_ids();
+      read_from = decide_file(from);
+      
+      // calc filename
+      std::string name        = hex_conv(read_from) + ".sq";
+      std::string full_name   = path() + "/" + name;
+      
+      // open the file
+      reader_sptr_.reset(new mmapped_reader{full_name});
+      act_file_ = read_from;
+    }
+
+    // try to seek to the position
+    reader_sptr_->seek(from-act_file_);
+    
+    {
+      uint64_t remaining   = 0;
+      const uint8_t * ptr  = reader_sptr_->get(remaining);
+      
+      while( ptr != nullptr )
+      {
+        // check magic
+        if( ((*ptr) & 0xf0) != 0xf0 )
+          break;
+        
+        uint8_t vlen  = (*ptr)&0x0f;
+        uint64_t dlen = 0;
+        
+        // this is the minimum size we need for a message
+        if( remaining < 1+vlen )
+        {
+          reader_sptr_->seek(reader_sptr_->last_position());
+          ptr = reader_sptr_->get(remaining);
+          if( remaining < 1+vlen )
+            break;
+        }
+        
+        dlen = varint_conv(ptr+1, vlen);
+        
+        // check if we can jump over the header and the data
+        if( remaining < dlen+1+vlen )
+          reader_sptr_->seek(reader_sptr_->last_position());
+        
+        bool cont = f(from,ptr+1+vlen,dlen);
+        ptr = reader_sptr_->move_by(dlen+1+vlen, remaining);
+        if( !cont )
+        {
+          return reader_sptr_->last_position()+act_file_;
+        }
+      }
+    }
+    
+    return reader_sptr_->last_position()+act_file_;
   }
   
   uint64_t
@@ -315,26 +407,16 @@ namespace virtdb { namespace queue {
     uint64_t latest = sync_.get();
     if( from >= latest )
     {
-      latest = sync_.wait_next(from,
-                               timeout_ms);
+      latest = sync_.wait_next(from, timeout_ms);
       
-      if( latest < from && wait_till < steady_clock::now() )
+      if( from >= latest )
       {
         // timed out
         return from;
       }
     }
     
-    latest = sync_.get();
-    
-    // cases :
-    //   no files yet
-    //   from < max_id_
-    //   from > max_id_
-    //   from == max_id_
-    
-    return 0;
-    
+    return pull_from(from, f);
   }
   
   simple_subscriber::~simple_subscriber()

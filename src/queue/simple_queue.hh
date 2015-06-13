@@ -24,7 +24,10 @@ namespace virtdb { namespace queue {
     const params & parameters()  const { return parameters_; }
     simple_queue(const std::string & path,
                  const params & p);
-    
+
+    static bool list_files(std::set<std::string> & results,
+                           const std::string & path);
+
     bool list_files(std::set<std::string> & results) const;
     std::string last_file() const;
     
@@ -46,21 +49,30 @@ namespace virtdb { namespace queue {
     
     void push(const void * data, uint64_t len);
     std::string act_file() const;
+
+    static void cleanup_all(const std::string & path);
   };
   
   class simple_subscriber : public simple_queue
   {
+  public:
+    typedef std::function<bool(uint64_t id,
+                               const uint8_t * ptr,
+                               uint64_t len)> pull_fun;
+    
+  private:
     sync_client             sync_;
     mmapped_reader::sptr    reader_sptr_;
     std::vector<uint64_t>   file_ids_;
+    uint64_t                next_;
+    uint64_t                act_file_;
     
     void update_ids();
-    void open_file(uint64_t id);
-    void open_from_id(uint64_t id);
+    
+    uint64_t pull_from(uint64_t from,
+                       pull_fun f);
     
   public:
-    typedef std::function<bool()> pull_fun;
-    
     simple_subscriber(const std::string & path,
                       const params & p = params());
     
