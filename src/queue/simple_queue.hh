@@ -4,6 +4,7 @@
 #include <queue/mmapped_file.hh>
 #include <queue/params.hh>
 #include <set>
+#include <vector>
 
 namespace virtdb { namespace queue {
   
@@ -40,6 +41,7 @@ namespace virtdb { namespace queue {
   public:
     simple_publisher(const std::string & path,
                      const params & p = params());
+    
     virtual ~simple_publisher();
     
     void push(const void * data, uint64_t len);
@@ -48,13 +50,25 @@ namespace virtdb { namespace queue {
   
   class simple_subscriber : public simple_queue
   {
-    sync_client           sync_;
-    mmapped_reader::sptr  reader_sptr_;
+    sync_client             sync_;
+    mmapped_reader::sptr    reader_sptr_;
+    std::vector<uint64_t>   file_ids_;
+    
+    void update_ids();
+    void open_file(uint64_t id);
+    void open_from_id(uint64_t id);
     
   public:
+    typedef std::function<bool()> pull_fun;
+    
     simple_subscriber(const std::string & path,
                       const params & p = params());
+    
     virtual ~simple_subscriber();
+    
+    uint64_t pull(uint64_t from,
+                  pull_fun f,
+                  uint64_t timeout_ms);
   };
   
 }}

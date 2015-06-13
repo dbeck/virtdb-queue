@@ -3,6 +3,7 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <string.h>
+#include <chrono>
 
 namespace virtdb { namespace queue {
   
@@ -265,11 +266,75 @@ namespace virtdb { namespace queue {
   {
   }
   
+  void
+  simple_subscriber::update_ids()
+  {
+    std::set<std::string> files;
+    if( list_files(files) )
+    {
+      std::vector<uint64_t> ids;
+      for( auto const & f : files )
+      {
+        if( !f.empty() )
+        {
+          ids.push_back(hex_conv(f));
+        }
+      }
+      file_ids_.swap(ids);
+    }
+  }
+  
   simple_subscriber::simple_subscriber(const std::string & path,
                                        const params & p)
   : simple_queue{path, p},
     sync_{path, p}
   {
+    update_ids();
+  }
+  
+  void
+  simple_subscriber::open_file(uint64_t id)
+  {
+  }
+  
+  void
+  simple_subscriber::open_from_id(uint64_t id)
+  {
+  }
+  
+  uint64_t
+  simple_subscriber::pull(uint64_t from,
+                          simple_subscriber::pull_fun f,
+                          uint64_t timeout_ms)
+  {
+    using std::chrono::steady_clock;
+    using std::chrono::milliseconds;
+    steady_clock::time_point wait_till = steady_clock::now() +
+                                         milliseconds(timeout_ms);
+    
+    uint64_t latest = sync_.get();
+    if( from >= latest )
+    {
+      latest = sync_.wait_next(from,
+                               timeout_ms);
+      
+      if( latest < from && wait_till < steady_clock::now() )
+      {
+        // timed out
+        return from;
+      }
+    }
+    
+    latest = sync_.get();
+    
+    // cases :
+    //   no files yet
+    //   from < max_id_
+    //   from > max_id_
+    //   from == max_id_
+    
+    return 0;
+    
   }
   
   simple_subscriber::~simple_subscriber()

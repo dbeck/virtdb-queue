@@ -90,6 +90,8 @@ namespace virtdb { namespace queue {
     virtual ~sync_client() {}
     
     uint64_t wait_next(uint64_t prev);
+    uint64_t wait_next(uint64_t prev,
+                       uint64_t timeout_ms);
   };
   
 }}

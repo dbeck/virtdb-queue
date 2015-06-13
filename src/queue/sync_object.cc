@@ -256,73 +256,42 @@ namespace virtdb { namespace queue {
   void
   sync_server::send_signal(uint64_t v)
   {
-    while( v > 0 )
+    unsigned short prev_values[5];
+    convert(sent_value_, prev_values);
+    
+    unsigned short result_values[5];
+    convert(sent_value_+v, result_values);
+
+    // 5 for adding and 10 for overflows
+    struct sembuf ops[10];
+    int n_ops = 0;
+    
+    for( int i=0; i<5; ++i )
     {
+      // there is something to add here
+      if( prev_values[i] < result_values[i] )
       {
-        uint64_t mod = v;
-        if( mod > (base()*9/10) )
-          mod = (base()*9/10);
-        
-        {
-          // adjust semaphore #0 first
-          struct sembuf ops[3];
-          ops[0].sem_num  = 0;
-          ops[0].sem_op   = (short)mod;
-          ops[0].sem_flg  = 0;
-          ops[1].sem_num  = 0;
-          ops[1].sem_op   = -1*(short)base();
-          ops[1].sem_flg  = IPC_NOWAIT;
-          ops[2].sem_num  = 1;
-          ops[2].sem_op   = 1;
-          ops[2].sem_flg  = 0;
-          
-          if( semop(semaphore_id(),ops,3) < 0 )
-          {
-            struct sembuf ops[1];
-            ops[0].sem_num  = 0;
-            ops[0].sem_op   = (short)mod;
-            ops[0].sem_flg  = 0;
-            
-            if( semop(semaphore_id(),ops,1) < 0 )
-            {
-              perror("failed to set semaphore");
-            }
-          }
-        }
-        v -= mod;
-        {
-          // handle overflow on semaphore #2
-          struct sembuf ops[2];
-          ops[0].sem_num  = 1;
-          ops[0].sem_op   = -1*(short)base();
-          ops[0].sem_flg  = IPC_NOWAIT;
-          ops[1].sem_num  = 2;
-          ops[1].sem_op   = 1;
-          ops[1].sem_flg  = 0;
-          semop(semaphore_id(),ops,2);
-        }
-        {
-          // handle overflow on semaphore #3
-          struct sembuf ops[2];
-          ops[0].sem_num  = 2;
-          ops[0].sem_op   = -1*(short)base();
-          ops[0].sem_flg  = IPC_NOWAIT;
-          ops[1].sem_num  = 3;
-          ops[1].sem_op   = 1;
-          ops[1].sem_flg  = 0;
-          semop(semaphore_id(),ops,2);
-        }
-        {
-          // handle overflow on semaphore #4
-          struct sembuf ops[2];
-          ops[0].sem_num  = 3;
-          ops[0].sem_op   = -1*(short)base();
-          ops[0].sem_flg  = IPC_NOWAIT;
-          ops[1].sem_num  = 4;
-          ops[1].sem_op   = 1;
-          ops[1].sem_flg  = 0;
-          semop(semaphore_id(),ops,2);
-        }
+        // add the extra value to the actual semaphore
+        ops[n_ops].sem_num  = i;
+        ops[n_ops].sem_op   = ((short)result_values[i]-(short)prev_values[i]);
+        ops[n_ops].sem_flg  = 0;
+        ++n_ops;
+      }
+      else if( prev_values[i] > result_values[i] )
+      {
+        // handle overflow
+        ops[n_ops].sem_num  = i;
+        ops[n_ops].sem_op   = -1*((short)prev_values[i]-(short)result_values[i]);
+        ops[n_ops].sem_flg  = IPC_NOWAIT;
+        ++n_ops;
+      }
+    }
+    
+    if( n_ops )
+    {
+      if( semop(semaphore_id(),ops,n_ops) < 0 )
+      {
+        perror("failed to set semaphore");
       }
     }
   }
@@ -391,6 +360,53 @@ namespace virtdb { namespace queue {
       }
     }
   }
+  
+  uint64_t
+  sync_client::wait_next(uint64_t prev,
+                         uint64_t timeout_ms)
+  {
+    using std::chrono::steady_clock;
+    using std::chrono::milliseconds;
+    
+    uint64_t act_val = 0;
+    steady_clock::time_point wait_till = steady_clock::now() +
+                                         milliseconds(timeout_ms);
+    
+    while( act_val <= prev &&
+           wait_till < steady_clock::now() )
+    {
+      unsigned short vals[5];
+      
+      if ( ::semctl(semaphore_id(),0,GETALL,vals) < 0 )
+        THROW_("couldn't get value for semaphores");
+      
+      act_val = convert(vals);
+      if( act_val > prev ) return act_val;
+      
+#ifdef _GNU_SOURCE
+      if( vals[0] < (base()*9/10) )
+      {
+        // timed wait
+        struct sembuf ops[2];
+        ops[0].sem_num  = 0;
+        ops[0].sem_op   = -1*(vals[0]+1);
+        ops[0].sem_flg  = 0;
+        ops[1].sem_num  = 0;
+        ops[1].sem_op   = vals[0]+1;
+        ops[1].sem_flg  = 0;
+        
+        // max 2 iterations
+        struct timespec ts = { 0, 1+((timeout_ms/2)*1000000) };
+        semtimedop(semaphore_id(),ops,2,&ts);
+      }
+      else
+#endif
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    
+    return act_val;
+  }
+
   
   uint64_t
   sync_client::wait_next(uint64_t prev)
