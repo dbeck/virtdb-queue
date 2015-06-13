@@ -77,7 +77,8 @@ namespace virtdb { namespace queue {
     sent_value_{0},
     last_value_{0},
     stop_{false},
-    thread_{[this](){entry();}}
+    thread_{[this](){entry();}},
+    update_count_{0}
   {
     struct stat dir_stat;
     on_return cleanup_on_exit([this](){
@@ -293,7 +294,14 @@ namespace virtdb { namespace queue {
       {
         perror("failed to set semaphore");
       }
+      ++update_count_;
     }
+  }
+  
+  uint64_t
+  sync_server::update_count() const
+  {
+    return update_count_.load();
   }
   
   void

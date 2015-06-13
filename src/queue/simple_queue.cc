@@ -92,12 +92,25 @@ namespace virtdb { namespace queue {
   simple_queue::simple_queue(const std::string & path,
                              const params & p)
   : path_{path},
-    parameters_{p}
+    parameters_{p},
+    mmap_count_{0}
   {
   }
   
   simple_queue::~simple_queue()
   {
+  }
+  
+  void
+  simple_queue::add_mmap_count(uint64_t v)
+  {
+    mmap_count_ += v;
+  }
+  
+  uint64_t
+  simple_queue::mmap_count() const
+  {
+    return mmap_count_;
   }
   
   bool
@@ -191,7 +204,7 @@ namespace virtdb { namespace queue {
       uint64_t remaining   = 0;
       const uint8_t * ptr  = reader.get(remaining);
       
-      while( ptr != nullptr )
+      while( ptr != nullptr && remaining )
       {
         // check magic
         if( ((*ptr) & 0xf0) != 0xf0 )
@@ -234,7 +247,11 @@ namespace virtdb { namespace queue {
     // update the semaphore to be at least as big as that
     sync_.set(file_offset_+last_position);
     
-    // Open mmapped file for writing
+    // update stats
+    if( writer_sptr_ )
+      add_mmap_count(writer_sptr_->mmap_count());
+      
+      // Open mmapped file for writing
     writer_sptr_.reset(new mmapped_writer(filename ,p));
     if( last_position )
       writer_sptr_->seek(last_position);
@@ -271,6 +288,12 @@ namespace virtdb { namespace queue {
     {
       std::string name = hex_conv(file_offset_+last_position) + ".sq";
       std::string filename = path() + "/" + name;
+      
+      // update stats
+      if( writer_sptr_ )
+        add_mmap_count(writer_sptr_->mmap_count());
+      
+      // open file for writing
       writer_sptr_.reset(new mmapped_writer(filename ,prms));
       file_offset_ += last_position;
     }
@@ -283,6 +306,12 @@ namespace virtdb { namespace queue {
     if( writer_sptr_ )
       ret = writer_sptr_->name();
     return ret;
+  }
+  
+  uint64_t
+  simple_publisher::sync_update_count() const
+  {
+    return sync_.update_count();
   }
   
   simple_publisher::~simple_publisher()
@@ -326,7 +355,7 @@ namespace virtdb { namespace queue {
       uint64_t ret = 0;
       for( auto it=file_ids_.begin(); it!=file_ids_.end(); ++it )
       {
-        if( from_val <= *it )
+        if( *it <= from_val )
           ret = *it;
         else
           break;
@@ -345,7 +374,11 @@ namespace virtdb { namespace queue {
       // calc filename
       std::string name        = hex_conv(read_from) + ".sq";
       std::string full_name   = path() + "/" + name;
-      
+
+      // update stats
+      if( reader_sptr_ )
+        add_mmap_count(reader_sptr_->mmap_count());
+
       // open the file
       reader_sptr_.reset(new mmapped_reader{full_name});
       act_file_ = read_from;
@@ -358,7 +391,7 @@ namespace virtdb { namespace queue {
       uint64_t remaining   = 0;
       const uint8_t * ptr  = reader_sptr_->get(remaining);
       
-      while( ptr != nullptr )
+      while( ptr != nullptr && remaining )
       {
         // check magic
         if( ((*ptr) & 0xf0) != 0xf0 )

@@ -58,6 +58,8 @@ namespace virtdb { namespace queue {
     std::atomic<uint64_t>      last_value_;
     std::atomic<bool>          stop_;
     std::thread                thread_;
+    // stats
+    std::atomic<uint64_t>      update_count_;
 
     int semaphore_id() const { return semaphore_id_; }
     void send_signal(uint64_t v);
@@ -75,6 +77,9 @@ namespace virtdb { namespace queue {
     bool cleanup_all();
     void signal(uint64_t v);
     void set(uint64_t v);
+    
+    // stats
+    uint64_t update_count() const;
   };
   
   class sync_client : public sync_object

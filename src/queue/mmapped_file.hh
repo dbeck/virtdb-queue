@@ -17,6 +17,8 @@ namespace virtdb { namespace queue {
     uint8_t *     aligned_ptr_;
     uint64_t      aligned_size_;
     uint64_t      aligned_offset_;
+    // stats
+    uint64_t      mmap_count_;
     
     // disable copying and default consturction
     // until properly implemented
@@ -53,6 +55,7 @@ namespace virtdb { namespace queue {
     uint64_t size();
     uint64_t min_known_size() const;
     uint64_t last_position() const;
+    uint64_t mmap_count() const;
     
     virtual ~mmapped_file();
   };

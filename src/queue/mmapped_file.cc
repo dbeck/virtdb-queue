@@ -29,7 +29,8 @@ namespace virtdb { namespace queue {
     min_known_size_{0},
     aligned_ptr_{nullptr},
     aligned_size_{0},
-    aligned_offset_{0}
+    aligned_offset_{0},
+    mmap_count_{0}
   {
   }
   
@@ -214,6 +215,8 @@ namespace virtdb { namespace queue {
     aligned_offset_      = real_offset;
     aligned_size_        = real_len;
     relative_position_   = offset-real_offset;
+    // update stats
+    ++mmap_count_;
   }
   
   void
@@ -263,6 +266,8 @@ namespace virtdb { namespace queue {
     aligned_offset_     = real_offset;
     aligned_size_       = real_len;
     relative_position_  = offset-real_offset;
+    // update stats
+    ++mmap_count_;
   }
   
   void
@@ -369,7 +374,13 @@ namespace virtdb { namespace queue {
   {
     return min_known_size_;
   }
-
+  
+  uint64_t
+  mmapped_file::mmap_count() const
+  {
+    return mmap_count_;
+  }
+  
   // WRITER Implementation
   
   mmapped_writer::mmapped_writer(const std::string & filename,

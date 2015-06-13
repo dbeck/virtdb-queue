@@ -27,7 +27,7 @@ int main(int argc, char ** argv)
     long long count = ::atoll(argv[2]);
     if( !count ) { THROW_("count must be positive integer"); }
     
-    sync_server s(folder);
+    sync_server s{folder};
     s.set(0);
     
     for( long long i=0; i<count; ++i )

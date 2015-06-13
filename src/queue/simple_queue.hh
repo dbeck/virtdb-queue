@@ -12,6 +12,7 @@ namespace virtdb { namespace queue {
   {
     std::string   path_;
     params        parameters_;
+    uint64_t      mmap_count_;
     
     // disable copying and default consturction
     // until properly implemented
@@ -30,9 +31,13 @@ namespace virtdb { namespace queue {
 
     bool list_files(std::set<std::string> & results) const;
     std::string last_file() const;
+    void add_mmap_count(uint64_t v);
     
   public:
     virtual ~simple_queue();
+    
+    // stats
+    uint64_t mmap_count() const;
   };
   
   class simple_publisher : public simple_queue
@@ -51,6 +56,9 @@ namespace virtdb { namespace queue {
     std::string act_file() const;
 
     static void cleanup_all(const std::string & path);
+    
+    // stats
+    uint64_t sync_update_count() const;
   };
   
   class simple_subscriber : public simple_queue
