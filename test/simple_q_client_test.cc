@@ -3,6 +3,7 @@
 #include <queue/exception.hh>
 #include <iostream>
 #include <string>
+#include <string.h>
 
 using namespace virtdb::queue;
 
