@@ -412,7 +412,7 @@ namespace virtdb { namespace queue {
       perror("failed to unmap");
     }
   }
-  
+
   uint64_t
   mmapped_writer::write(const void * data,
                         uint64_t len)

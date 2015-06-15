@@ -275,6 +275,10 @@ namespace virtdb { namespace queue {
     varint_conv(len, vdata+1, vlen);
     vdata[0] = 0xf0 | vlen;
     
+    auto const & prms = parameters();
+    
+    // NOTE: here I assume that all writes go to the same file and
+    //       new file is not created between writes
     writer_sptr_->write(vdata, vlen+1);
     if( data && len )
       writer_sptr_->write(data, len);
@@ -282,9 +286,68 @@ namespace virtdb { namespace queue {
     uint64_t last_position = writer_sptr_->last_position();
     sync_.signal(file_offset_+last_position);
     
-    auto const & prms = parameters();
     if( last_position > prms.mmap_max_file_size_ &&
         last_position > prms.mmap_buffer_size_ )
+    {
+      std::string name = hex_conv(file_offset_+last_position) + ".sq";
+      std::string filename = path() + "/" + name;
+      
+      // update stats
+      if( writer_sptr_ )
+        add_mmap_count(writer_sptr_->mmap_count());
+      
+      // open file for writing
+      writer_sptr_.reset(new mmapped_writer(filename ,prms));
+      file_offset_ += last_position;
+    }
+  }
+  
+  void
+  simple_publisher::push(const buffer_vector & buffers)
+  {
+    if( !writer_sptr_ )
+    {
+      THROW_(std::string{"no file opened in: "}+path());
+    }
+    
+    uint64_t len = 0;
+    for( auto const & b : buffers )
+    {
+      if( b.first && b.second )
+      {
+        len += b.second;
+      }
+    }
+    
+    // 1 byte magic: 0xf0 + size of varlen
+    // size: in varint format
+    // data
+    
+    uint8_t vdata[12];
+    uint8_t vlen = 0;
+    varint_conv(len, vdata+1, vlen);
+    vdata[0] = 0xf0 | vlen;
+
+    auto const & prms = parameters();
+    
+    // NOTE: here I assume that all writes go to the same file and
+    //       new file is not created between writes
+    
+    writer_sptr_->write(vdata, vlen+1);
+    for( auto const & b : buffers )
+    {
+      if( b.first && b.second )
+      {
+        writer_sptr_->write(b.first, b.second);
+      }
+    }
+    
+    uint64_t last_position = writer_sptr_->last_position();
+    sync_.signal(file_offset_+last_position);
+    
+    // we may need to open a new file if the current one became too big
+    if( last_position > prms.mmap_max_file_size_ &&
+       last_position > prms.mmap_buffer_size_ )
     {
       std::string name = hex_conv(file_offset_+last_position) + ".sq";
       std::string filename = path() + "/" + name;

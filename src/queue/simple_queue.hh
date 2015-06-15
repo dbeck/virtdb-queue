@@ -47,12 +47,17 @@ namespace virtdb { namespace queue {
     uint64_t              file_offset_;
     
   public:
+    typedef std::pair<const void *, uint64_t>   buffer;
+    typedef std::vector<buffer>                 buffer_vector;
+    
     simple_publisher(const std::string & path,
                      const params & p = params());
     
     virtual ~simple_publisher();
     
     void push(const void * data, uint64_t len);
+    void push(const buffer_vector & buffers);
+    
     std::string act_file() const;
 
     static void cleanup_all(const std::string & path);
