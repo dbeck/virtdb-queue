@@ -14,7 +14,7 @@ namespace virtdb { namespace queue {
     uint64_t      bases_[5];
     params        parameters_;
     
-    // disable copying and default consturction
+    // disable copying and default construction
     // until properly implemented
     sync_object() = delete;
     sync_object(const sync_object &) = delete;

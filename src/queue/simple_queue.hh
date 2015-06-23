@@ -14,7 +14,7 @@ namespace virtdb { namespace queue {
     params        parameters_;
     uint64_t      mmap_count_;
     
-    // disable copying and default consturction
+    // disable copying and default construction
     // until properly implemented
     simple_queue() = delete;
     simple_queue(const simple_queue &) = delete;

@@ -20,7 +20,7 @@ namespace virtdb { namespace queue {
     // stats
     uint64_t      mmap_count_;
     
-    // disable copying and default consturction
+    // disable copying and default construction
     // until properly implemented
     mmapped_file() = delete;
     mmapped_file(const mmapped_file &) = delete;
