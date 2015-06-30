@@ -362,6 +362,15 @@ namespace virtdb { namespace queue {
     }
   }
   
+  uint64_t
+  simple_publisher::position() const
+  {
+    if( !writer_sptr_ )
+      return 0;
+    else
+      return file_offset_+writer_sptr_->last_position();
+  }
+  
   std::string
   simple_publisher::act_file() const
   {
@@ -473,12 +482,20 @@ namespace virtdb { namespace queue {
         }
         
         dlen = varint_conv(ptr+1, vlen);
-        
+
         // check if we can jump over the header and the data
         if( remaining < dlen+1+vlen )
+        {
           reader_sptr_->seek(reader_sptr_->last_position());
+          ptr = reader_sptr_->get(remaining);
+          if( remaining < dlen+1+vlen )
+            break;
+        }
         
-        bool cont = f(from,ptr+1+vlen,dlen);
+        bool cont = f(reader_sptr_->last_position(),
+                      ptr+1+vlen,
+                      dlen);
+        
         ptr = reader_sptr_->move_by(dlen+1+vlen, remaining);
         if( !cont )
         {
@@ -488,6 +505,15 @@ namespace virtdb { namespace queue {
     }
     
     return reader_sptr_->last_position()+act_file_;
+  }
+  
+  uint64_t
+  simple_subscriber::position() const
+  {
+    if( !reader_sptr_ )
+      return 0;
+    else
+      return act_file_+reader_sptr_->last_position();
   }
   
   uint64_t
@@ -515,7 +541,68 @@ namespace virtdb { namespace queue {
     return pull_from(from, f);
   }
   
+  void
+  simple_subscriber::seek_to_end()
+  {
+    // re-check file list
+    update_ids();
+    
+    uint64_t read_from = 0;
+    if( !file_ids_.empty() )
+      read_from = file_ids_.back();
+
+    // check if we need to reopen a different file
+    if( act_file_ != read_from || !reader_sptr_ )
+    {
+      // calc filename
+      std::string name        = hex_conv(read_from) + ".sq";
+      std::string full_name   = path() + "/" + name;
+      
+      // update stats
+      if( reader_sptr_ )
+        add_mmap_count(reader_sptr_->mmap_count());
+      
+      // open the file
+      reader_sptr_.reset(new mmapped_reader{full_name});
+      act_file_ = read_from;
+    }
+    
+    {
+      // seek to the last position
+      uint64_t remaining   = 0;
+      const uint8_t * ptr  = reader_sptr_->get(remaining);
+      
+      while( ptr != nullptr && remaining )
+      {
+        // check magic
+        if( ((*ptr) & 0xf0) != 0xf0 )
+          break;
+        
+        uint8_t vlen  = (*ptr)&0x0f;
+        uint64_t dlen = 0;
+        
+        // this is the minimum size we need for a message
+        if( remaining < 1+vlen )
+        {
+          reader_sptr_->seek(reader_sptr_->last_position());
+          ptr = reader_sptr_->get(remaining);
+          if( remaining < 1+vlen )
+            break;
+        }
+        
+        dlen = varint_conv(ptr+1, vlen);
+        
+        // check if we can jump over the header and the data
+        if( remaining < dlen+1+vlen )
+          reader_sptr_->seek(reader_sptr_->last_position());
+        
+        ptr = reader_sptr_->move_by(dlen+1+vlen, remaining);
+      }
+    }
+  }
+
   simple_subscriber::~simple_subscriber()
   {
   }
+  
 }}

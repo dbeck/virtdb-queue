@@ -59,6 +59,7 @@ namespace virtdb { namespace queue {
     void push(const buffer_vector & buffers);
     
     std::string act_file() const;
+    uint64_t position() const;
 
     static void cleanup_all(const std::string & path);
     
@@ -91,9 +92,13 @@ namespace virtdb { namespace queue {
     
     virtual ~simple_subscriber();
     
+    uint64_t position() const;
+    
     uint64_t pull(uint64_t from,
                   pull_fun f,
                   uint64_t timeout_ms);
+    
+    void seek_to_end();
   };
   
 }}

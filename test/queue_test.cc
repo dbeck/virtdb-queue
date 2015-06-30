@@ -3,6 +3,7 @@
 #include <queue/sync_object.hh>
 #include <queue/simple_queue.hh>
 #include <queue/mmapped_file.hh>
+#include <queue/varint.hh>
 #include <future>
 #include <iostream>
 #include <string.h>
@@ -15,10 +16,39 @@ namespace virtdb { namespace test {
   class SyncObjectTest : public ::testing::Test { };
   class SimpleQueueTest : public ::testing::Test { };
   class MmappedFileTest : public ::testing::Test { };
+  class VarIntTest : public ::testing::Test { };
   
 }}
 
 using namespace virtdb::test;
+
+TEST_F(VarIntTest, TwoWay16)
+{
+  for( uint16_t i=0; i<65535; ++i )
+  {
+    varint v{i};
+    varint v2{v.buf(), v.len()};
+    EXPECT_EQ(v2.get16(), i);
+    EXPECT_EQ(v2.get64(), i);
+    EXPECT_EQ(v.get16(), v2.get16());
+    EXPECT_EQ(v.get64(), v2.get64());
+    EXPECT_EQ(v.len(), v2.len());
+  }
+}
+
+TEST_F(VarIntTest, TwoWay64)
+{
+  for( uint64_t i=0; i<(65535<<15); i+=(i+3) )
+  {
+    varint v{i};
+    std::string stmp{v.buf(), v.buf()+v.len()};
+    varint v2{stmp};
+    EXPECT_EQ(v2.get64(), i);
+    EXPECT_EQ(v.get64(), v2.get64());
+    EXPECT_EQ(v.len(), v2.len());
+  }
+}
+
 
 TEST_F(MmappedFileTest, RevampedWriteLoop)
 {
@@ -110,6 +140,36 @@ TEST_F(MmappedFileTest, RevampedIntegerLoop)
     std::cout << "last_pos: " << rd.last_position() << " msgs: " << 23*1024*1024 << "\n";
   }
   ::unlink(file_name);
+}
+
+TEST_F(SimpleQueueTest, SeekToEnd)
+{
+  const char * name = "/tmp/SimpleQueueTest.SeekToEnd.test";
+
+  {
+    params p;
+    p.mmap_max_file_size_ = 4*1024*1024;
+
+    simple_publisher pub{name,p};
+  
+    char tmp[99];
+    ::memset(tmp,0,99);
+  
+    for( int i=0;i<1024*1024;++i )
+      pub.push(tmp, 99);
+    
+    {
+      simple_subscriber sub{name,p};
+      std::cout << "sub position:" << sub.position() << " mmap count:" << sub.mmap_count() << "\n";
+      sub.seek_to_end();
+      std::cout << "sub position:" << sub.position() << " mmap count:" << sub.mmap_count() << "\n";
+      std::cout << "pub position:" << pub.position() << " mmap count:" << pub.mmap_count() << "\n";
+    }
+  }
+
+  {
+    simple_publisher::cleanup_all(name);
+  }
 }
 
 TEST_F(SimpleQueueTest, CreatePublisherAndSubscriber)
