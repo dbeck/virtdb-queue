@@ -94,6 +94,8 @@ namespace virtdb { namespace queue {
     
     uint64_t position() const;
     
+    // TODO : FIXME : pull max ????
+    // there is a chance that server has not yet finished with the write op ...
     uint64_t pull(uint64_t from,
                   pull_fun f,
                   uint64_t timeout_ms);

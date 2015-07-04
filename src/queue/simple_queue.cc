@@ -516,6 +516,8 @@ namespace virtdb { namespace queue {
       return act_file_+reader_sptr_->last_position();
   }
   
+  // TODO : FIXME : pull max ????
+  // there is a chance that server has not yet finished with the write op ...
   uint64_t
   simple_subscriber::pull(uint64_t from,
                           simple_subscriber::pull_fun f,

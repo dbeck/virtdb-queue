@@ -414,7 +414,6 @@ namespace virtdb { namespace queue {
     
     return act_val;
   }
-
   
   uint64_t
   sync_client::wait_next(uint64_t prev)
