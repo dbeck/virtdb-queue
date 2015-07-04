@@ -2,7 +2,6 @@
   'variables': {
     'queue_sources' :  [
                          'src/queue/simple_queue.cc',        'src/queue/simple_queue.hh',
-                         'src/queue/multi_queue.cc',         'src/queue/multi_queue.hh',
                          'src/queue/sync_object.cc',         'src/queue/sync_object.hh',
                          'src/queue/mmapped_file.cc',        'src/queue/mmapped_file.hh',
                          # header only:
