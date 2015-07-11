@@ -49,6 +49,8 @@ namespace virtdb { namespace queue {
   public:
     typedef std::pair<const void *, uint64_t>   buffer;
     typedef std::vector<buffer>                 buffer_vector;
+    typedef std::shared_ptr<simple_publisher>   sptr;
+
     
     simple_publisher(const std::string & path,
                      const params & p = params());
@@ -72,7 +74,8 @@ namespace virtdb { namespace queue {
   public:
     typedef std::function<bool(uint64_t id,
                                const uint8_t * ptr,
-                               uint64_t len)> pull_fun;
+                               uint64_t len)>   pull_fun;
+    typedef std::shared_ptr<simple_subscriber>  sptr;
     
   private:
     sync_client             sync_;
